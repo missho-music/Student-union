@@ -8,7 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Firebase SDKs (CDN) - Firestore Only -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -50,7 +49,6 @@
 
     <div id="app" class="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
         
-        <!-- Header -->
         <header class="bg-white/90 backdrop-blur-md rounded-3xl shadow-sm border border-slate-100 p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
             <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-blue-100/40 rounded-full blur-2xl pointer-events-none"></div>
             <div class="absolute right-32 -top-10 w-32 h-32 bg-sky-100/40 rounded-full blur-2xl pointer-events-none"></div>
@@ -77,23 +75,21 @@
             </div>
         </header>
 
-        <!-- Navigation Controls: Terms & Views -->
         <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-white/90 backdrop-blur-md rounded-2xl shadow-xs border border-slate-100 p-2 gap-3">
             <div class="flex bg-slate-100/80 rounded-xl p-1.5 w-full sm:w-fit gap-1">
                 <button onclick="switchTerm(1)" id="term-btn-1" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all bg-blue-600 text-white shadow-sm">第 1 學期 (10/12-11/2)</button>
-                <button onclick="switchTerm(2)" id="term-btn-2" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900">第 2 學期</button>
-                <button onclick="switchTerm(3)" id="term-btn-3" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900">第 3 學期</button>
+                <button onclick="switchTerm(2)" id="term-btn-2" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900">第 2 學期 (11/23-2/22)</button>
+                <button onclick="switchTerm(3)" id="term-btn-3" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900">第 3 學期 (3/15-6/3)</button>
             </div>
 
             <div class="flex bg-slate-100/80 rounded-xl p-1.5 w-full sm:w-fit gap-1">
-                <button onclick="switchView('daily')" id="view-btn-daily" class="flex-1 sm:px-5 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all bg-white text-blue-600 shadow-sm">每日排班視圖</button>
+                <button onclick="switchView('daily')" id="view-btn-daily" class="flex-1 sm:px-5 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all bg-white text-blue-600 shadow-sm">每日排班</button>
                 <button onclick="switchView('matrix')" id="view-btn-matrix" class="flex-1 sm:px-5 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900">學期總表</button>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            <!-- Left: Dynamic View (2 Cols) -->
             <div class="lg:col-span-2 space-y-4">
                 <div class="bg-white/95 backdrop-blur-md rounded-3xl shadow-xs border border-slate-100 p-6 md:p-8">
                     <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
@@ -114,7 +110,6 @@
                 </div>
             </div>
 
-            <!-- Right: Statistics (1 Col) -->
             <div class="lg:col-span-1">
                 <div class="bg-white/95 backdrop-blur-md rounded-3xl shadow-xs border border-slate-100 p-6 md:p-8 sticky top-6">
                     <h2 class="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900 pb-4 border-b border-slate-100">
@@ -153,7 +148,6 @@
         </div>
     </div>
 
-    <!-- Members Modal -->
     <div id="members-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-200 border border-slate-100">
             <div class="p-6 md:p-7 border-b border-slate-100 flex justify-between items-center bg-slate-50/70">
@@ -177,6 +171,7 @@
 
     <script>
         const DEFAULT_MEMBERS = Array.from({ length: 16 }, (_, i) => `成員 ${i + 1}`);
+        const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
         
         let state = {
             currentTerm: 1,
@@ -228,21 +223,21 @@
             render();
         }
 
-        // 校曆邏輯與學期天數計算 (依據學校校曆表嚴格過濾)
+        // 精確學期與校曆規則運算
         function generateTermDates(term) {
             let start, end;
             if (term === 1) {
-                // 第一學期精確鎖定：10月12日至11月2日
+                // 第 1 學期：10月12日至11月2日
                 start = new Date('2026-10-12');
                 end = new Date('2026-11-02');
             } else if (term === 2) {
-                // 第二學期：3月至4月 (排除考試週與假期)
-                start = new Date('2027-03-01');
-                end = new Date('2027-04-30');
+                // 第 2 學期：11月23日至2月22日
+                start = new Date('2026-11-23');
+                end = new Date('2027-02-22');
             } else {
-                // 第三學期：5月至7月
-                start = new Date('2027-05-01');
-                end = new Date('2027-07-16');
+                // 第 3 學期：3月15日至6月3日
+                start = new Date('2027-03-15');
+                end = new Date('2027-06-03');
             }
 
             const dates = [];
@@ -255,16 +250,15 @@
                 const dd = String(d.getDate()).padStart(2, '0');
                 const dateStr = `${yyyy}-${mm}-${dd}`;
 
-                // 校曆假期與考試前一週排除
+                // 學校長假期與公眾假期排除
                 const holidays = [
                     '2026-10-19', '2026-10-24', '2026-11-02',
-                    '2027-03-01', '2027-03-02', '2027-03-03', '2027-03-04', '2027-03-05', '2027-03-08', '2027-03-09', '2027-03-10', '2027-03-11', // 第二學期考試週
-                    '2027-04-03', '2027-04-04', '2027-04-05', '2027-04-06', '2027-04-12',
-                    '2027-05-19', '2027-06-03', '2027-06-09', '2027-07-01'
+                    '2026-12-22', '2026-12-23', '2026-12-24', '2026-12-25', '2026-12-28', '2026-12-29', '2026-12-30', '2026-12-31', '2027-01-01',
+                    '2027-02-03', '2027-02-04', '2027-02-05', '2027-02-08', '2027-02-09', '2027-02-10', '2027-02-11', '2027-02-12', '2027-04-05'
                 ];
                 if (holidays.includes(dateStr)) continue;
 
-                dates.push({ date: dateStr, term: term });
+                dates.push({ date: dateStr, term: term, dayOfWeek: WEEKDAYS[day] });
             }
             return dates;
         }
@@ -312,7 +306,7 @@
                     btn.className = "flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900";
                 }
             }
-            const desc = term === 1 ? "第 1 學期 (10/12-11/2)" : `第 ${term} 學期`;
+            const desc = term === 1 ? "第 1 學期 (10/12-11/2)" : (term === 2 ? "第 2 學期 (11/23-2/22)" : "第 3 學期 (3/15-6/3)");
             document.getElementById('view-main-title').innerHTML = `
                 <span class="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -361,6 +355,7 @@
 
             termDates.forEach(item => {
                 const dateStr = item.date;
+                const dayOfWeek = item.dayOfWeek;
                 if (!state.records[dateStr]) {
                     state.records[dateStr] = { lunch: ["", ""], afterSchool: ["", ""], remarks: [] };
                 }
@@ -394,7 +389,7 @@
                     <div class="bg-slate-50/80 px-5 py-3.5 border-b border-slate-100 flex justify-between items-center">
                         <h3 class="font-bold text-slate-800 text-sm md:text-base flex items-center gap-2.5">
                             <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                            ${dateStr}
+                            ${dateStr} <span class="text-xs font-semibold px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md border border-blue-100">${dayOfWeek}</span>
                         </h3>
                     </div>
 
@@ -466,7 +461,7 @@
                     <table class="w-full text-xs text-left border-collapse bg-white">
                         <thead>
                             <tr class="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200">
-                                <th class="p-3.5 border-r border-slate-200 min-w-[110px]">日期</th>
+                                <th class="p-3.5 border-r border-slate-200 min-w-[160px]">日期</th>
                                 <th class="p-3.5 border-r border-slate-200 text-blue-900 bg-blue-50/60 min-w-[170px]">午膳當值 (1)</th>
                                 <th class="p-3.5 border-r border-slate-200 text-blue-900 bg-blue-50/60 min-w-[170px]">午膳當值 (2)</th>
                                 <th class="p-3.5 border-r border-slate-200 text-indigo-900 bg-indigo-50/60 min-w-[170px]">放學當值 (1)</th>
@@ -478,6 +473,7 @@
 
             termDates.forEach(item => {
                 const dateStr = item.date;
+                const dayOfWeek = item.dayOfWeek;
                 const rec = state.records[dateStr] || { lunch: ["", ""], afterSchool: ["", ""] };
 
                 const l1 = rec.lunch?.[0] ? `<span class="bg-blue-100/80 text-blue-900 font-semibold px-2.5 py-1 rounded-lg">${rec.lunch[0]}</span>` : '<span class="text-slate-300">-</span>';
@@ -487,7 +483,9 @@
 
                 tableHtml += `
                     <tr class="hover:bg-slate-50/80 transition">
-                        <td class="p-3.5 font-bold text-slate-800 border-r border-slate-100 whitespace-nowrap bg-slate-50/40">${dateStr}</td>
+                        <td class="p-3.5 font-bold text-slate-800 border-r border-slate-100 whitespace-nowrap bg-slate-50/40">
+                            ${dateStr} <span class="text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded ml-1">${dayOfWeek}</span>
+                        </td>
                         <td class="p-3.5 border-r border-slate-100">${l1}</td>
                         <td class="p-3.5 border-r border-slate-100">${l2}</td>
                         <td class="p-3.5 border-r border-slate-100">${a1}</td>
@@ -620,11 +618,3 @@
 
         window.onload = function() {
             setTimeout(() => {
-                if (!state.isCloudReady) {
-                    initLocalStorageFallback();
-                }
-            }, 1200);
-        };
-    </script>
-</body>
-</html>
