@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>學生會 Counter 當值分配系統</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-3OsCFOxKwRvMOYSwtdtHQtu5hevyDQE",
+            authDomain: "school-admin-8cc4f.firebaseapp.com",
+            projectId: "school-admin-8cc4f",
+            storageBucket: "school-admin-8cc4f.firebasestorage.app",
+            messagingSenderId: "906512650902",
+            appId: "1:906512650902:web:f51018de2fb88f7042e8b7",
+            measurementId: "G-D4XSFMPRRK"
+        };
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+
+            window.firebaseDb = db;
+            window.firebaseFns = { collection, doc, setDoc, onSnapshot };
+
+            console.log("Firebase Firestore 雲端連線成功！");
+            initCloudSync();
+        } catch (err) {
+            console.error("Firebase 初始化失敗，切換至本地儲存：", err);
+            initLocalStorageFallback();
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50/50 via-sky-50/30 to-indigo-50/50 text-slate-800 min-h-screen">
+
+    <div id="app" class="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
+        
+        <header class="bg-white/90 backdrop-blur-md rounded-3xl shadow-sm border border-slate-100 p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
+            <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-blue-100/40 rounded-full blur-2xl pointer-events-none"></div>
+            <div class="absolute right-32 -top-10 w-32 h-32 bg-sky-100/40 rounded-full blur-2xl pointer-events-none"></div>
+
+            <div class="relative z-10">
+                <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 text-blue-600 text-xs font-semibold mb-3 border border-blue-100/60 shadow-xs">
+                    <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span id="cloud-status-text">school-admin 連線初始化中...</span>
+                </div>
+                <h1 class="text-2xl md:text-4xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+                    <span class="p-3 bg-gradient-to-tr from-blue-600 to-indigo-500 text-white rounded-2xl shadow-md shadow-blue-200">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="3" ry="3"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    </span>
+                    學生會 Counter 當值分配系統
+                </h1>
+                <p class="text-slate-500 mt-2 text-sm md:text-base">中華基督教會基智中學 2026/2027 年度 · 智慧排班與雲端同步</p>
+            </div>
+            
+            <div class="relative z-10 flex gap-3 w-full md:w-auto">
+                <button onclick="openMembersModal()" class="flex-1 md:flex-initial px-5 py-3 bg-white hover:bg-blue-50/50 text-slate-700 rounded-2xl transition font-semibold flex items-center justify-center gap-2.5 border border-slate-200/80 shadow-xs hover:border-blue-200">
+                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    管理 16 位成員
+                </button>
+            </div>
+        </header>
+
+        <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-white/90 backdrop-blur-md rounded-2xl shadow-xs border border-slate-100 p-2 gap-3">
+            <div class="flex bg-slate-100/80 rounded-xl p-1.5 w-full sm:w-fit gap-1">
+                <button onclick="switchTerm(1)" id="term-btn-1" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all bg-blue-600 text-white shadow-sm">第 1 學期 (10/12-11/2)</button>
+                <button onclick="switchTerm(2)" id="term-btn-2" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900">第 2 學期 (11/23-2/22)</button>
+                <button onclick="switchTerm(3)" id="term-btn-3" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900">第 3 學期 (3/15-6/3)</button>
+            </div>
+
+            <div class="flex bg-slate-100/80 rounded-xl p-1.5 w-full sm:w-fit gap-1">
+                <button onclick="switchView('daily')" id="view-btn-daily" class="flex-1 sm:px-5 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all bg-white text-blue-600 shadow-sm">每日排班</button>
+                <button onclick="switchView('matrix')" id="view-btn-matrix" class="flex-1 sm:px-5 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900">學期總表</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <div class="lg:col-span-2 space-y-4">
+                <div class="bg-white/95 backdrop-blur-md rounded-3xl shadow-xs border border-slate-100 p-6 md:p-8">
+                    <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
+                        <h2 id="view-main-title" class="text-xl font-bold flex items-center gap-3 text-slate-900">
+                            <span class="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            </span>
+                            第 1 學期 每日排班表 (10/12-11/2)
+                        </h2>
+                        <span id="date-count-badge" class="text-xs bg-blue-50 text-blue-600 font-bold px-3.5 py-1.5 rounded-full border border-blue-100">載入中...</span>
+                    </div>
+
+                    <!-- Daily Roster Container -->
+                    <div id="daily-view-container" class="space-y-4"></div>
+
+                    <!-- Matrix Overview Container (學期總表) -->
+                    <div id="matrix-view-container" class="hidden overflow-hidden"></div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-1">
+                <div class="bg-white/95 backdrop-blur-md rounded-3xl shadow-xs border border-slate-100 p-6 md:p-8 sticky top-6">
+                    <h2 class="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900 pb-4 border-b border-slate-100">
+                        <span class="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        </span>
+                        時數統計與排行
+                    </h2>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-50/70 text-slate-500 font-semibold text-xs uppercase tracking-wider">
+                                <tr>
+                                    <th class="px-3 py-3.5 rounded-tl-xl rounded-bl-xl">成員</th>
+                                    <th class="px-3 py-3.5 text-center">淨時數</th>
+                                    <th class="px-3 py-3.5 text-right rounded-tr-xl rounded-br-xl">扣除</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stats-table-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-6 p-4 bg-gradient-to-r from-blue-50/40 to-indigo-50/40 border border-slate-100 text-slate-600 text-xs rounded-2xl space-y-2">
+                        <p class="font-bold text-slate-700 flex items-center gap-1.5">
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                            計分與規則說明：
+                        </p>
+                        <p>• 午膳當值 = <span class="text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded">0.5 小時</span></p>
+                        <p>• 放學當值 = <span class="text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">1.0 小時</span></p>
+                        <p>• 可於每日排班下方新增缺席扣時紀錄。</p>
+                        <p id="storage-mode-hint" class="text-blue-600 font-semibold pt-1 border-t border-slate-200/60 mt-2">Firestore 雲端連線中...</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="members-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-200 border border-slate-100">
+            <div class="p-6 md:p-7 border-b border-slate-100 flex justify-between items-center bg-slate-50/70">
+                <h2 class="text-xl font-bold flex items-center gap-3 text-slate-900">
+                    <span class="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    </span>
+                    管理 16 位成員名單
+                </h2>
+                <button onclick="closeMembersModal()" class="w-9 h-9 flex items-center justify-center rounded-full bg-slate-200/70 hover:bg-slate-300 text-slate-600 transition font-bold">&times;</button>
+            </div>
+            
+            <div id="members-inputs-container" class="p-6 md:p-8 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+
+            <div class="p-6 border-t border-slate-100 bg-slate-50/70 flex justify-end gap-3">
+                <button onclick="closeMembersModal()" class="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-2xl hover:bg-slate-50 transition font-semibold shadow-xs">取消</button>
+                <button onclick="saveMembers()" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl transition font-semibold flex items-center gap-2 shadow-md shadow-blue-200">儲存名單</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DEFAULT_MEMBERS = Array.from({ length: 16 }, (_, i) => `成員 ${i + 1}`);
+        const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+        
+        let state = {
+            currentTerm: 1,
+            currentView: 'daily',
+            members: DEFAULT_MEMBERS,
+            records: {},
+            isCloudReady: false
+        };
+
+        function initCloudSync() {
+            const db = window.firebaseDb;
+            const { doc, collection, onSnapshot, setDoc } = window.firebaseFns;
+
+            document.getElementById('cloud-status-dot').className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+            document.getElementById('cloud-status-text').innerText = "school-admin Firestore 雲端連線就緒";
+            document.getElementById('storage-mode-hint').innerText = "資料已直接儲存於 school-admin 雲端專案。";
+            state.isCloudReady = true;
+
+            const settingsRef = doc(db, 'school_admin_settings', 'rosterConfig');
+            onSnapshot(settingsRef, (docSnap) => {
+                if (docSnap.exists() && docSnap.data().members) {
+                    state.members = docSnap.data().members;
+                } else {
+                    setDoc(settingsRef, { members: DEFAULT_MEMBERS }, { merge: true });
+                }
+                render();
+            }, (err) => {
+                console.warn("Firestore 權限提示，切換至本地儲存備援：", err);
+                initLocalStorageFallback();
+            });
+
+            const recordsCol = collection(db, 'school_admin_records');
+            onSnapshot(recordsCol, (snapshot) => {
+                const newRecords = {};
+                snapshot.forEach(docSnap => {
+                    newRecords[docSnap.id] = docSnap.data();
+                });
+                state.records = newRecords;
+                render();
+            }, (err) => console.warn("排班監聽提示：", err));
+        }
+
+        function initLocalStorageFallback() {
+            document.getElementById('cloud-status-dot').className = "w-2 h-2 rounded-full bg-sky-500";
+            document.getElementById('cloud-status-text').innerText = "本地瀏覽器儲存模式";
+            document.getElementById('storage-mode-hint').innerText = "資料儲存於此瀏覽器 (LocalStorage)。";
+            state.members = JSON.parse(localStorage.getItem('su_members')) || DEFAULT_MEMBERS;
+            state.records = JSON.parse(localStorage.getItem('su_records')) || {};
+            render();
+        }
+
+        // 精確學期與校曆規則運算
+        function generateTermDates(term) {
+            let start, end;
+            if (term === 1) {
+                // 第 1 學期：10月12日至11月2日
+                start = new Date('2026-10-12');
+                end = new Date('2026-11-02');
+            } else if (term === 2) {
+                // 第 2 學期：11月23日至2月22日
+                start = new Date('2026-11-23');
+                end = new Date('2027-02-22');
+            } else {
+                // 第 3 學期：3月15日至6月3日
+                start = new Date('2027-03-15');
+                end = new Date('2027-06-03');
+            }
+
+            const dates = [];
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                const day = d.getDay();
+                if (day === 0 || day === 6) continue; // 週末
+
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                const dateStr = `${yyyy}-${mm}-${dd}`;
+
+                // 學校長假期與公眾假期排除
+                const holidays = [
+                    '2026-10-19', '2026-10-24', '2026-11-02',
+                    '2026-12-22', '2026-12-23', '2026-12-24', '2026-12-25', '2026-12-28', '2026-12-29', '2026-12-30', '2026-12-31', '2027-01-01',
+                    '2027-02-03', '2027-02-04', '2027-02-05', '2027-02-08', '2027-02-09', '2027-02-10', '2027-02-11', '2027-02-12', '2027-04-05'
+                ];
+                if (holidays.includes(dateStr)) continue;
+
+                dates.push({ date: dateStr, term: term, dayOfWeek: WEEKDAYS[day] });
+            }
+            return dates;
+        }
+
+        async function saveData(dateStr, recordData) {
+            if (state.isCloudReady) {
+                try {
+                    const db = window.firebaseDb;
+                    const { doc, setDoc } = window.firebaseFns;
+                    const recordRef = doc(db, 'school_admin_records', dateStr);
+                    await setDoc(recordRef, recordData, { merge: true });
+                } catch (err) {
+                    console.error("雲端儲存失敗", err);
+                }
+            } else {
+                state.records[dateStr] = recordData;
+                localStorage.setItem('su_records', JSON.stringify(state.records));
+                render();
+            }
+        }
+
+        async function saveMembersToCloud() {
+            if (state.isCloudReady) {
+                try {
+                    const db = window.firebaseDb;
+                    const { doc, setDoc } = window.firebaseFns;
+                    const settingsRef = doc(db, 'school_admin_settings', 'rosterConfig');
+                    await setDoc(settingsRef, { members: state.members }, { merge: true });
+                } catch (err) {
+                    console.error("儲存成員失敗", err);
+                }
+            } else {
+                localStorage.setItem('su_members', JSON.stringify(state.members));
+                render();
+            }
+        }
+
+        function switchTerm(term) {
+            state.currentTerm = term;
+            for (let i = 1; i <= 3; i++) {
+                const btn = document.getElementById(`term-btn-${i}`);
+                if (i === term) {
+                    btn.className = "flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all bg-blue-600 text-white shadow-sm";
+                } else {
+                    btn.className = "flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900";
+                }
+            }
+            const desc = term === 1 ? "第 1 學期 (10/12-11/2)" : (term === 2 ? "第 2 學期 (11/23-2/22)" : "第 3 學期 (3/15-6/3)");
+            document.getElementById('view-main-title').innerHTML = `
+                <span class="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </span>
+                ${desc} 排班表`;
+            render();
+        }
+
+        function switchView(view) {
+            state.currentView = view;
+            const dailyBtn = document.getElementById('view-btn-daily');
+            const matrixBtn = document.getElementById('view-btn-matrix');
+            const dailyContainer = document.getElementById('daily-view-container');
+            const matrixContainer = document.getElementById('matrix-view-container');
+
+            if (view === 'daily') {
+                dailyBtn.className = "flex-1 sm:px-5 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all bg-white text-blue-600 shadow-sm";
+                matrixBtn.className = "flex-1 sm:px-5 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900";
+                dailyContainer.classList.remove('hidden');
+                matrixContainer.classList.add('hidden');
+            } else {
+                matrixBtn.className = "flex-1 sm:px-5 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all bg-white text-blue-600 shadow-sm";
+                dailyBtn.className = "flex-1 sm:px-5 py-2.5 text-xs md:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900";
+                matrixContainer.classList.remove('hidden');
+                dailyContainer.classList.add('hidden');
+            }
+            render();
+        }
+
+        function render() {
+            const termDates = generateTermDates(state.currentTerm);
+            document.getElementById('date-count-badge').innerText = `共 ${termDates.length} 個上課日`;
+
+            if (state.currentView === 'daily') {
+                renderDailyView(termDates);
+            } else {
+                renderMatrixView(termDates);
+            }
+
+            renderStats(termDates);
+        }
+
+        function renderDailyView(termDates) {
+            const container = document.getElementById('daily-view-container');
+            container.innerHTML = '';
+
+            termDates.forEach(item => {
+                const dateStr = item.date;
+                const dayOfWeek = item.dayOfWeek;
+                if (!state.records[dateStr]) {
+                    state.records[dateStr] = { lunch: ["", ""], afterSchool: ["", ""], remarks: [] };
+                }
+                const rec = state.records[dateStr];
+
+                const card = document.createElement('div');
+                card.className = 'border border-slate-100 rounded-2xl bg-white shadow-xs hover:shadow-md transition-all overflow-hidden border-l-4 border-l-blue-500';
+                
+                let memberOptions = '<option value="">-- 選擇成員 --</option>';
+                state.members.forEach(m => {
+                    memberOptions += `<option value="${m}">${m}</option>`;
+                });
+
+                let remarksHtml = '';
+                if (rec.remarks && rec.remarks.length > 0) {
+                    rec.remarks.forEach(rem => {
+                        remarksHtml += `
+                            <div class="flex justify-between items-center bg-rose-50/40 p-3 rounded-xl border border-rose-100 text-xs md:text-sm">
+                                <div class="flex items-center gap-3">
+                                    <span class="font-semibold text-slate-800">${rem.member}</span>
+                                    <span class="text-rose-600 font-bold bg-rose-100/70 px-2 py-0.5 rounded-md text-xs">-${rem.hours}h</span>
+                                    <span class="text-slate-500 text-xs border-l border-rose-200 pl-2">${rem.reason || "無原因"}</span>
+                                </div>
+                                <button onclick="deleteRemark('${dateStr}', '${rem.id}')" class="text-slate-400 hover:text-rose-600 font-bold px-1.5 text-base">&times;</button>
+                            </div>
+                        `;
+                    });
+                }
+
+                card.innerHTML = `
+                    <div class="bg-slate-50/80 px-5 py-3.5 border-b border-slate-100 flex justify-between items-center">
+                        <h3 class="font-bold text-slate-800 text-sm md:text-base flex items-center gap-2.5">
+                            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                            ${dateStr} <span class="text-xs font-semibold px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md border border-blue-100">${dayOfWeek}</span>
+                        </h3>
+                    </div>
+
+                    <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div class="space-y-3 bg-blue-50/30 p-4 rounded-2xl border border-blue-100/60">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-blue-800 text-xs uppercase tracking-wider bg-blue-100/80 px-2.5 py-1 rounded-lg">午膳 (1:05-1:30)</span>
+                                <span class="text-xs text-blue-700 font-semibold">0.5 小時</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <select onchange="updateAssignee('${dateStr}', 'lunch', 0, this.value)" class="w-full border border-slate-200 rounded-xl p-2.5 text-xs bg-white hover:border-blue-400 focus:ring-2 focus:ring-blue-200 outline-none transition">
+                                    ${memberOptions.replace(`value="${rec.lunch?.[0]}"`, `value="${rec.lunch?.[0]}" selected`)}
+                                </select>
+                                <select onchange="updateAssignee('${dateStr}', 'lunch', 1, this.value)" class="w-full border border-slate-200 rounded-xl p-2.5 text-xs bg-white hover:border-blue-400 focus:ring-2 focus:ring-blue-200 outline-none transition">
+                                    ${memberOptions.replace(`value="${rec.lunch?.[1]}"`, `value="${rec.lunch?.[1]}" selected`)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100/60">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-indigo-800 text-xs uppercase tracking-wider bg-indigo-100/80 px-2.5 py-1 rounded-lg">放學 (4:05-5:00)</span>
+                                <span class="text-xs text-indigo-700 font-semibold">1.0 小時</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <select onchange="updateAssignee('${dateStr}', 'afterSchool', 0, this.value)" class="w-full border border-slate-200 rounded-xl p-2.5 text-xs bg-white hover:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none transition">
+                                    ${memberOptions.replace(`value="${rec.afterSchool?.[0]}"`, `value="${rec.afterSchool?.[0]}" selected`)}
+                                </select>
+                                <select onchange="updateAssignee('${dateStr}', 'afterSchool', 1, this.value)" class="w-full border border-slate-200 rounded-xl p-2.5 text-xs bg-white hover:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none transition">
+                                    ${memberOptions.replace(`value="${rec.afterSchool?.[1]}"`, `value="${rec.afterSchool?.[1]}" selected`)}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50/40 border-t border-slate-100 p-4 space-y-3">
+                        <div class="flex justify-between items-center">
+                            <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">缺席與扣時紀錄 (Remark)</h4>
+                            <button onclick="toggleRemarkForm('${dateStr}')" class="text-xs text-blue-600 hover:text-blue-800 font-semibold bg-blue-50 px-3 py-1.5 rounded-xl transition border border-blue-100">+ 新增扣時</button>
+                        </div>
+                        ${remarksHtml ? `<div class="space-y-2">${remarksHtml}</div>` : ''}
+                        
+                        <div id="remark-form-${dateStr}" class="hidden bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap gap-3 items-end mt-2">
+                            <div class="flex-1 min-w-[120px]">
+                                <label class="block text-xs text-slate-400 mb-1 font-medium">成員</label>
+                                <select id="remark-member-${dateStr}" class="w-full border border-slate-200 rounded-xl p-2 text-xs bg-slate-50">${memberOptions}</select>
+                            </div>
+                            <div class="w-24">
+                                <label class="block text-xs text-slate-400 mb-1 font-medium">扣除(h)</label>
+                                <input type="number" id="remark-hours-${dateStr}" step="0.5" min="0.5" value="0.5" class="w-full border border-slate-200 rounded-xl p-2 text-xs bg-slate-50">
+                            </div>
+                            <div class="flex-[2] min-w-[150px]">
+                                <label class="block text-xs text-slate-400 mb-1 font-medium">原因</label>
+                                <input type="text" id="remark-reason-${dateStr}" placeholder="例如：病假" class="w-full border border-slate-200 rounded-xl p-2 text-xs bg-slate-50">
+                            </div>
+                            <button onclick="addRemark('${dateStr}')" class="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-semibold transition shadow-xs">確認扣時</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderMatrixView(termDates) {
+            const container = document.getElementById('matrix-view-container');
+            
+            let tableHtml = `
+                <div class="overflow-x-auto rounded-2xl border border-slate-200/80 shadow-xs">
+                    <table class="w-full text-xs text-left border-collapse bg-white">
+                        <thead>
+                            <tr class="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200">
+                                <th class="p-3.5 border-r border-slate-200 min-w-[160px]">日期</th>
+                                <th class="p-3.5 border-r border-slate-200 text-blue-900 bg-blue-50/60 min-w-[170px]">午膳當值 (1)</th>
+                                <th class="p-3.5 border-r border-slate-200 text-blue-900 bg-blue-50/60 min-w-[170px]">午膳當值 (2)</th>
+                                <th class="p-3.5 border-r border-slate-200 text-indigo-900 bg-indigo-50/60 min-w-[170px]">放學當值 (1)</th>
+                                <th class="p-3.5 text-indigo-900 bg-indigo-50/60 min-w-[170px]">放學當值 (2)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+            `;
+
+            termDates.forEach(item => {
+                const dateStr = item.date;
+                const dayOfWeek = item.dayOfWeek;
+                const rec = state.records[dateStr] || { lunch: ["", ""], afterSchool: ["", ""] };
+
+                const l1 = rec.lunch?.[0] ? `<span class="bg-blue-100/80 text-blue-900 font-semibold px-2.5 py-1 rounded-lg">${rec.lunch[0]}</span>` : '<span class="text-slate-300">-</span>';
+                const l2 = rec.lunch?.[1] ? `<span class="bg-blue-100/80 text-blue-900 font-semibold px-2.5 py-1 rounded-lg">${rec.lunch[1]}</span>` : '<span class="text-slate-300">-</span>';
+                const a1 = rec.afterSchool?.[0] ? `<span class="bg-indigo-100/80 text-indigo-900 font-semibold px-2.5 py-1 rounded-lg">${rec.afterSchool[0]}</span>` : '<span class="text-slate-300">-</span>';
+                const a2 = rec.afterSchool?.[1] ? `<span class="bg-indigo-100/80 text-indigo-900 font-semibold px-2.5 py-1 rounded-lg">${rec.afterSchool[1]}</span>` : '<span class="text-slate-300">-</span>';
+
+                tableHtml += `
+                    <tr class="hover:bg-slate-50/80 transition">
+                        <td class="p-3.5 font-bold text-slate-800 border-r border-slate-100 whitespace-nowrap bg-slate-50/40">
+                            ${dateStr} <span class="text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded ml-1">${dayOfWeek}</span>
+                        </td>
+                        <td class="p-3.5 border-r border-slate-100">${l1}</td>
+                        <td class="p-3.5 border-r border-slate-100">${l2}</td>
+                        <td class="p-3.5 border-r border-slate-100">${a1}</td>
+                        <td class="p-3.5">${a2}</td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += `</tbody></table></div>`;
+            container.innerHTML = tableHtml;
+        }
+
+        function renderStats(termDates) {
+            const stats = {};
+            state.members.forEach(m => {
+                stats[m] = { totalHrs: 0, deductionHrs: 0 };
+            });
+
+            const termDateStrs = termDates.map(i => i.date);
+
+            Object.keys(state.records).forEach(dateStr => {
+                if (!termDateStrs.includes(dateStr)) return;
+                const rec = state.records[dateStr];
+
+                if (rec.lunch) {
+                    rec.lunch.forEach(m => { if (stats[m]) stats[m].totalHrs += 0.5; });
+                }
+                if (rec.afterSchool) {
+                    rec.afterSchool.forEach(m => { if (stats[m]) stats[m].totalHrs += 1.0; });
+                }
+                if (rec.remarks) {
+                    rec.remarks.forEach(rem => {
+                        if (stats[rem.member]) {
+                            stats[rem.member].deductionHrs += Number(rem.hours || 0);
+                            stats[rem.member].totalHrs -= Number(rem.hours || 0);
+                        }
+                    });
+                }
+            });
+
+            const tbody = document.getElementById('stats-table-body');
+            tbody.innerHTML = '';
+
+            state.members.forEach(m => {
+                const s = stats[m];
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition';
+                tr.innerHTML = `
+                    <td class="px-3 py-3 font-medium text-slate-800">${m}</td>
+                    <td class="px-3 py-3 text-center">
+                        <span class="px-2.5 py-1 rounded-full text-xs font-bold ${s.totalHrs > 0 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'}">
+                            ${s.totalHrs.toFixed(1)} h
+                        </span>
+                    </td>
+                    <td class="px-3 py-3 text-right text-rose-500 font-medium">${s.deductionHrs > 0 ? `-${s.deductionHrs}h` : '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateAssignee(dateStr, type, index, value) {
+            if (!state.records[dateStr]) {
+                state.records[dateStr] = { lunch: ["", ""], afterSchool: ["", ""], remarks: [] };
+            }
+            state.records[dateStr][type][index] = value;
+            saveData(dateStr, state.records[dateStr]);
+        }
+
+        function toggleRemarkForm(dateStr) {
+            const form = document.getElementById(`remark-form-${dateStr}`);
+            form.classList.toggle('hidden');
+        }
+
+        function addRemark(dateStr) {
+            const member = document.getElementById(`remark-member-${dateStr}`).value;
+            const hours = document.getElementById(`remark-hours-${dateStr}`).value;
+            const reason = document.getElementById(`remark-reason-${dateStr}`).value;
+            if (!member) return;
+
+            if (!state.records[dateStr]) {
+                state.records[dateStr] = { lunch: ["", ""], afterSchool: ["", ""], remarks: [] };
+            }
+            if (!state.records[dateStr].remarks) {
+                state.records[dateStr].remarks = [];
+            }
+            state.records[dateStr].remarks.push({
+                id: Date.now().toString(),
+                member: member,
+                hours: Number(hours),
+                reason: reason
+            });
+            saveData(dateStr, state.records[dateStr]);
+        }
+
+        function deleteRemark(dateStr, remarkId) {
+            if (state.records[dateStr] && state.records[dateStr].remarks) {
+                state.records[dateStr].remarks = state.records[dateStr].remarks.filter(r => r.id !== remarkId);
+                saveData(dateStr, state.records[dateStr]);
+            }
+        }
+
+        function openMembersModal() {
+            const container = document.getElementById('members-inputs-container');
+            container.innerHTML = '';
+            state.members.forEach((m, idx) => {
+                container.innerHTML += `
+                    <div class="flex items-center gap-3">
+                        <span class="text-slate-400 w-6 text-right text-sm font-semibold">${idx + 1}.</span>
+                        <input type="text" id="member-input-${idx}" value="${m}" class="flex-1 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition">
+                    </div>
+                `;
+            });
+            document.getElementById('members-modal').classList.remove('hidden');
+        }
+
+        function closeMembersModal() {
+            document.getElementById('members-modal').classList.add('hidden');
+        }
+
+        function saveMembers() {
+            const newMembers = [];
+            for (let i = 0; i < 16; i++) {
+                const val = document.getElementById(`member-input-${i}`).value.trim();
+                newMembers.push(val || `成員 ${i + 1}`);
+            }
+            state.members = newMembers;
+            closeMembersModal();
+            saveMembersToCloud();
+        }
+
+        window.onload = function() {
+            setTimeout(() => {
+                if (!state.isCloudReady) {
+                    initLocalStorageFallback();
+                }
+            }, 1200);
+        };
+    </script>
+</body>
+</html>
