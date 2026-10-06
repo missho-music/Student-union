@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>學生會 Counter 當值分配系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // 你的專屬 Firebase 設定
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-3OsCFOxKwRvMOYSwtdtHQtu5hevyDQE",
+            authDomain: "school-admin-8cc4f.firebaseapp.com",
+            projectId: "school-admin-8cc4f",
+            storageBucket: "school-admin-8cc4f.firebasestorage.app",
+            messagingSenderId: "906512650902",
+            appId: "1:906512650902:web:f51018de2fb88f7042e8b7",
+            measurementId: "G-D4XSFMPRRK"
+        };
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+
+            // 綁定到全域變數
+            window.firebaseDb = db;
+            window.firebaseFns = { collection, doc, setDoc, onSnapshot };
+
+            console.log("Firebase Firestore 初始化成功！");
+            initCloudSync();
+        } catch (err) {
+            console.error("Firebase 初始化失敗，切換至本地儲存：", err);
+            initLocalStorageFallback();
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #eff6ff; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb { background: #93c5fd; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #60a5fa; }
+    </style>
+</head>
+<body class="bg-blue-50 text-slate-800 min-h-screen">
+
+    <div id="app" class="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
+        
+        <!-- Header -->
+        <header class="bg-white rounded-3xl shadow-sm border border-blue-100 p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
+            <div class="relative z-10">
+                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold mb-3 border border-blue-100">
+                    <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span id="cloud-status-text">連線初始化中...</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-blue-900 tracking-tight flex items-center gap-3">
+                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="3" ry="3"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    學生會 Counter 當值分配系統
+                </h1>
+                <p class="text-blue-600/70 mt-2 text-sm md:text-base font-medium">中華基督教會基智中學 2026/2027 年度</p>
+            </div>
+            
+            <div class="relative z-10 flex gap-3 w-full md:w-auto">
+                <button onclick="openMembersModal()" class="flex-1 md:flex-initial px-6 py-3 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-2xl transition font-bold flex items-center justify-center gap-2.5 border border-blue-200">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    管理名單
+                </button>
+            </div>
+        </header>
+
+        <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-white rounded-2xl shadow-sm border border-blue-100 p-2 gap-3">
+            <div class="flex bg-blue-50/50 rounded-xl p-1.5 w-full sm:w-fit gap-1 border border-blue-50">
+                <button onclick="switchTerm(1)" id="term-btn-1" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all bg-blue-600 text-white shadow-sm">第 1 學期</button>
+                <button onclick="switchTerm(2)" id="term-btn-2" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all text-blue-600/70 hover:text-blue-800 hover:bg-blue-100">第 2 學期</button>
+                <button onclick="switchTerm(3)" id="term-btn-3" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all text-blue-600/70 hover:text-blue-800 hover:bg-blue-100">第 3 學期</button>
+            </div>
+
+            <div class="flex bg-blue-50/50 rounded-xl p-1.5 w-full sm:w-fit gap-1 border border-blue-50">
+                <button onclick="switchView('daily')" id="view-btn-daily" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all bg-white text-blue-900 shadow-sm border border-blue-100">每日排班</button>
+                <button onclick="switchView('matrix')" id="view-btn-matrix" class="flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all text-blue-600/70 hover:text-blue-800 hover:bg-blue-100">學期總表</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- 左欄：排班內容 -->
+            <div class="lg:col-span-2 space-y-4">
+                <div class="bg-white rounded-3xl shadow-sm border border-blue-100 p-6 md:p-8">
+                    <div class="flex justify-between items-center mb-6 pb-4 border-b border-blue-50">
+                        <h2 id="view-main-title" class="text-xl font-bold flex items-center gap-3 text-blue-900">
+                            <span class="p-2.5 bg-blue-100 text-blue-700 rounded-2xl">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            </span>
+                            第 1 學期 排班表 (10/12-11/2)
+                        </h2>
+                        <span id="date-count-badge" class="text-xs bg-blue-50 text-blue-700 font-bold px-3.5 py-1.5 rounded-full border border-blue-100">載入中...</span>
+                    </div>
+
+                    <div id="daily-view-container" class="space-y-5"></div>
+                    <div id="matrix-view-container" class="hidden overflow-hidden"></div>
+                </div>
+            </div>
+
+            <!-- 右欄：時數統計 -->
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-3xl shadow-sm border border-blue-100 p-6 md:p-8 sticky top-6">
+                    <h2 class="text-xl font-bold mb-6 flex items-center gap-3 text-blue-900 pb-4 border-b border-blue-50">
+                        <span class="p-2.5 bg-emerald-100 text-emerald-700 rounded-2xl">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        </span>
+                        時數統計與排行
+                    </h2>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-blue-50/50 text-blue-600/80 font-bold text-xs uppercase tracking-wider">
+                                <tr>
+                                    <th class="px-4 py-3.5 rounded-tl-xl rounded-bl-xl">成員</th>
+                                    <th class="px-4 py-3.5 text-center">淨時數</th>
+                                    <th class="px-4 py-3.5 text-right rounded-tr-xl rounded-br-xl">扣除</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stats-table-body" class="divide-y divide-blue-50/50"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-6 p-5 bg-blue-50/50 border border-blue-100 text-blue-700/80 text-xs rounded-2xl space-y-2">
+                        <p class="font-bold text-blue-900 flex items-center gap-1.5 text-sm mb-3">
+                            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                            計分規則說明
+                        </p>
+                        <p class="flex items-center justify-between">
+                            <span>午膳當值</span> 
+                            <span class="text-blue-700 font-bold bg-white px-2 py-0.5 rounded-md border border-blue-200 shadow-sm">0.5 小時</span>
+                        </p>
+                        <p class="flex items-center justify-between">
+                            <span>放學當值</span> 
+                            <span class="text-indigo-700 font-bold bg-white px-2 py-0.5 rounded-md border border-indigo-200 shadow-sm">1.0 小時</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 成員設定 Modal -->
+    <div id="members-modal" class="fixed inset-0 bg-blue-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] border border-blue-100">
+            <div class="p-6 md:p-7 border-b border-blue-50 flex justify-between items-center bg-blue-50/30">
+                <h2 class="text-xl font-bold flex items-center gap-3 text-blue-900">
+                    <span class="p-2.5 bg-blue-100 text-blue-700 rounded-2xl">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    </span>
+                    設定 16 位成員名單
+                </h2>
+                <button onclick="closeMembersModal()" class="w-9 h-9 flex items-center justify-center rounded-full bg-blue-50 hover:bg-blue-100 text-blue-700 transition font-bold">&times;</button>
+            </div>
+            
+            <div id="members-inputs-container" class="p-6 md:p-8 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+
+            <div class="p-6 border-t border-blue-50 bg-blue-50/30 flex justify-end gap-3">
+                <button onclick="closeMembersModal()" class="px-5 py-2.5 bg-white border border-blue-200 text-blue-800 rounded-2xl hover:bg-blue-50 transition font-bold shadow-sm">取消</button>
+                <button onclick="saveMembers()" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl transition font-bold flex items-center gap-2 shadow-sm">儲存名單</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DEFAULT_MEMBERS = Array.from({ length: 16 }, (_, i) => `成員 ${i + 1}`);
+        const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+        
+        let state = {
+            currentTerm: 1,
+            currentView: 'daily',
+            members: DEFAULT_MEMBERS,
+            records: {},
+            isCloudReady: false
+        };
+
+        function initCloudSync() {
+            const db = window.firebaseDb;
+            const { doc, collection, onSnapshot, setDoc } = window.firebaseFns;
+
+            document.getElementById('cloud-status-dot').className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+            document.getElementById('cloud-status-text').innerText = "雲端即時同步中";
+            state.isCloudReady = true;
+
+            // 讀取設定 (成員名單)
+            const settingsRef = doc(db, 'school_admin_settings', 'rosterConfig');
+            onSnapshot(settingsRef, (docSnap) => {
+                if (docSnap.exists() && docSnap.data().members) {
+                    state.members = docSnap.data().members;
+                } else {
+                    setDoc(settingsRef, { members: DEFAULT_MEMBERS }, { merge: true }).catch(console.warn);
+                }
+                render(); // 初次載入渲染
+            }, (err) => {
+                console.warn("Firestore 設定讀取失敗：", err);
+                initLocalStorageFallback();
+            });
+
+            // 讀取所有排班紀錄
+            const recordsCol = collection(db, 'school_admin_records');
+            onSnapshot(recordsCol, (snapshot) => {
+                const newRecords = {};
+                snapshot.forEach(docSnap => {
+                    newRecords[docSnap.id] = docSnap.data();
+                });
+                
+                // 雲端資料與本地合併 (雲端優先)
+                state.records = { ...state.records, ...newRecords };
+                
+                render(); // 同步後更新全畫面
+            }, (err) => {
+                console.warn("Firestore 紀錄讀取失敗，降級至本地儲存：", err);
+                initLocalStorageFallback();
+            });
+        }
+
+        // 本地儲存備援 (防呆機制)
+        function initLocalStorageFallback() {
+            state.isCloudReady = false;
+            document.getElementById('cloud-status-dot').className = "w-2 h-2 rounded-full bg-slate-400";
+            document.getElementById('cloud-status-text').innerText = "離線/本地模式";
+            state.members = JSON.parse(localStorage.getItem('su_members')) || DEFAULT_MEMBERS;
+            state.records = JSON.parse(localStorage.getItem('su_records')) || {};
+            render();
+        }
+
+        function generateTermDates(term) {
+            let start, end;
+            if (term === 1) {
+                // 第一學期：10月12日到11月2日
+                start = new Date('2026-10-12');
+                end = new Date('2026-11-02');
+            } else if (term === 2) {
+                // 第二學期：11月23日到2月22日
+                start = new Date('2026-11-23');
+                end = new Date('2027-02-22');
+            } else {
+                // 第三學期：3月15日到6月3日
+                start = new Date('2027-03-15');
+                end = new Date('2027-06-03');
+            }
+
+            const dates = [];
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                const day = d.getDay();
+                if (day === 0 || day === 6) continue; // 排除週末
+
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                const dateStr = `${yyyy}-${mm}-${dd}`;
+
+                // 排除特別假期
+                const holidays = [
+                    '2026-10-19', '2026-10-24', '2026-12-22', '2026-12-23', '2026-12-24', '2026-12-25', '2026-12-28', '2026-12-29', '2026-12-30', '2026-12-31', '2027-01-01',
+                    '2027-02-03', '2027-02-04', '2027-02-05', '2027-02-08', '2027-02-09', '2027-02-10', '2027-02-11', '2027-02-12', '2027-04-05'
+                ];
+                if (holidays.includes(dateStr)) continue;
+
+                dates.push({ date: dateStr, term: term, dayOfWeek: WEEKDAYS[day] });
+            }
+            return dates;
+        }
+
+        // 核心儲存函數：秒速更新本地，再推上雲端
+        async function saveData(dateStr, recordData) {
+            // 1. 樂觀更新 (Optimistic UI)：立刻更新本地記憶體與 LocalStorage
+            state.records[dateStr] = recordData;
+            localStorage.setItem('su_records', JSON.stringify(state.records));
+            
+            // 2. 立即重算並渲染右側時數統計，讓畫面「秒更新」！
+            const termDates = generateTermDates(state.currentTerm);
+            renderStats(termDates);
+
+            // 3. 在背景同步到 Firebase
+            if (state.isCloudReady) {
+                try {
+                    const db = window.firebaseDb;
+                    const { doc, setDoc } = window.firebaseFns;
+                    const recordRef = doc(db, 'school_admin_records', dateStr);
+                    await setDoc(recordRef, recordData, { merge: true });
+                } catch (err) {
+                    console.warn("雲端儲存權限被拒，切換回本地：", err);
+                    state.isCloudReady = false; // 出錯即降級，不再重複報錯
+                    document.getElementById('cloud-status-dot').className = "w-2 h-2 rounded-full bg-slate-400";
+                    document.getElementById('cloud-status-text').innerText = "離線/本地模式";
+                }
+            }
+        }
+
+        async function saveMembersToCloud() {
+            if (state.isCloudReady) {
+                try {
+                    const db = window.firebaseDb;
+                    const { doc, setDoc } = window.firebaseFns;
+                    const settingsRef = doc(db, 'school_admin_settings', 'rosterConfig');
+                    await setDoc(settingsRef, { members: state.members }, { merge: true });
+                } catch (err) {
+                    console.warn("儲存成員失敗", err);
+                }
+            }
+            localStorage.setItem('su_members', JSON.stringify(state.members));
+        }
+
+        function switchTerm(term) {
+            state.currentTerm = term;
+            for (let i = 1; i <= 3; i++) {
+                const btn = document.getElementById(`term-btn-${i}`);
+                if (i === term) {
+                    btn.className = "flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all bg-blue-600 text-white shadow-sm";
+                } else {
+                    btn.className = "flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all text-blue-600/70 hover:text-blue-800 hover:bg-blue-100";
+                }
+            }
+            const desc = term === 1 ? "第 1 學期 (10/12-11/2)" : (term === 2 ? "第 2 學期 (11/23-2/22)" : "第 3 學期 (3/15-6/3)");
+            document.getElementById('view-main-title').innerHTML = `
+                <span class="p-2.5 bg-blue-100 text-blue-700 rounded-2xl">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </span>
+                ${desc} 排班表`;
+            render();
+        }
+
+        function switchView(view) {
+            window.state.currentView = view;
+            const dailyBtn = document.getElementById('view-btn-daily');
+            const matrixBtn = document.getElementById('view-btn-matrix');
+            const dailyContainer = document.getElementById('daily-view-container');
+            const matrixContainer = document.getElementById('matrix-view-container');
+
+            if (view === 'daily') {
+                dailyBtn.className = "flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all bg-white text-blue-900 shadow-sm border border-blue-100";
+                matrixBtn.className = "flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all text-blue-600/70 hover:text-blue-800 hover:bg-blue-100";
+                dailyContainer.classList.remove('hidden');
+                matrixContainer.classList.add('hidden');
+            } else {
+                matrixBtn.className = "flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all bg-white text-blue-900 shadow-sm border border-blue-100";
+                dailyBtn.className = "flex-1 sm:px-6 py-2.5 text-xs md:text-sm font-bold rounded-lg transition-all text-blue-600/70 hover:text-blue-800 hover:bg-blue-100";
+                matrixContainer.classList.remove('hidden');
+                dailyContainer.classList.add('hidden');
+            }
+            render();
+        }
+
+        window.switchView = switchView;
+        window.switchTerm = switchTerm;
+
+        // 防呆設計：精準生成選項，避免字串取代產生的 Bug
+        function buildSelectOptions(selectedValue) {
+            let html = `<option value="">-- 選擇成員 --</option>`;
+            state.members.forEach(m => {
+                const isSelected = (m === selectedValue) ? "selected" : "";
+                html += `<option value="${m}" ${isSelected}>${m}</option>`;
+            });
+            return html;
+        }
+
+        function render() {
+            const termDates = generateTermDates(state.currentTerm);
+            document.getElementById('date-count-badge').innerText = `共 ${termDates.length} 個上課日`;
+
+            if (state.currentView === 'daily') {
+                renderDailyView(termDates);
+            } else {
+                renderMatrixView(termDates);
+            }
+
+            renderStats(termDates);
+        }
+
+        function renderDailyView(termDates) {
+            const container = document.getElementById('daily-view-container');
+            container.innerHTML = '';
+
+            termDates.forEach(item => {
+                const dateStr = item.date;
+                const dayOfWeek = item.dayOfWeek;
+                if (!state.records[dateStr]) {
+                    state.records[dateStr] = { lunch: ["", ""], afterSchool: ["", ""], remarks: [] };
+                }
+                const rec = state.records[dateStr];
+
+                const card = document.createElement('div');
+                card.className = 'border border-blue-100 rounded-3xl bg-white shadow-sm hover:shadow-md transition-all overflow-hidden';
+                
+                let remarksHtml = '';
+                if (rec.remarks && rec.remarks.length > 0) {
+                    rec.remarks.forEach(rem => {
+                        remarksHtml += `
+                            <div class="flex justify-between items-center bg-rose-50 p-3.5 rounded-xl border border-rose-100 text-sm">
+                                <div class="flex items-center gap-3">
+                                    <span class="font-bold text-rose-900">${rem.member}</span>
+                                    <span class="text-rose-600 font-bold bg-white px-2 py-0.5 rounded-md text-xs border border-rose-200 shadow-sm">-${rem.hours}h</span>
+                                    <span class="text-rose-500/80 text-xs border-l border-rose-200 pl-3">${rem.reason || "無原因"}</span>
+                                </div>
+                                <button onclick="deleteRemark('${dateStr}', '${rem.id}')" class="text-rose-400 hover:text-rose-600 font-bold px-1.5 text-lg transition">&times;</button>
+                            </div>
+                        `;
+                    });
+                }
+
+                card.innerHTML = `
+                    <div class="bg-blue-50/50 px-6 py-4 border-b border-blue-100 flex justify-between items-center">
+                        <h3 class="font-bold text-blue-900 text-base md:text-lg flex items-center gap-2.5">
+                            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                            ${dateStr} <span class="text-sm font-bold px-2.5 py-0.5 bg-white text-blue-700 rounded-lg border border-blue-200 shadow-sm">${dayOfWeek}</span>
+                        </h3>
+                    </div>
+
+                    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold text-blue-800 text-xs md:text-sm bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200">午膳當值 (1:05-1:30)</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <select onchange="updateAssignee('${dateStr}', 'lunch', 0, this.value)" class="w-full border border-blue-200 rounded-xl p-3 text-sm font-medium text-blue-900 bg-white hover:border-blue-400 focus:ring-2 focus:ring-blue-200 outline-none transition cursor-pointer shadow-sm">
+                                    ${buildSelectOptions(rec.lunch?.[0])}
+                                </select>
+                                <select onchange="updateAssignee('${dateStr}', 'lunch', 1, this.value)" class="w-full border border-blue-200 rounded-xl p-3 text-sm font-medium text-blue-900 bg-white hover:border-blue-400 focus:ring-2 focus:ring-blue-200 outline-none transition cursor-pointer shadow-sm">
+                                    ${buildSelectOptions(rec.lunch?.[1])}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold text-indigo-800 text-xs md:text-sm bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200">放學當值 (4:05-5:00)</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <select onchange="updateAssignee('${dateStr}', 'afterSchool', 0, this.value)" class="w-full border border-indigo-200 rounded-xl p-3 text-sm font-medium text-blue-900 bg-white hover:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none transition cursor-pointer shadow-sm">
+                                    ${buildSelectOptions(rec.afterSchool?.[0])}
+                                </select>
+                                <select onchange="updateAssignee('${dateStr}', 'afterSchool', 1, this.value)" class="w-full border border-indigo-200 rounded-xl p-3 text-sm font-medium text-blue-900 bg-white hover:border-indigo-400 focus:ring-2 focus:ring-indigo-200 outline-none transition cursor-pointer shadow-sm">
+                                    ${buildSelectOptions(rec.afterSchool?.[1])}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50/50 p-5 space-y-3 border-t border-slate-100">
+                        <div class="flex justify-between items-center">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">缺席與扣時紀錄 (Remark)</h4>
+                            <button onclick="toggleRemarkForm('${dateStr}')" class="text-xs text-blue-700 hover:text-blue-900 font-bold bg-white px-4 py-2 rounded-xl transition border border-blue-200 shadow-sm">+ 新增扣時</button>
+                        </div>
+                        ${remarksHtml ? `<div class="space-y-2.5 mt-2">${remarksHtml}</div>` : ''}
+                        
+                        <div id="remark-form-${dateStr}" class="hidden bg-white p-5 rounded-2xl border border-blue-100 shadow-sm flex flex-wrap gap-4 items-end mt-3">
+                            <div class="flex-1 min-w-[120px]">
+                                <label class="block text-xs text-blue-700/70 mb-1.5 font-bold">成員</label>
+                                <select id="remark-member-${dateStr}" class="w-full border border-blue-200 rounded-xl p-2.5 text-sm font-medium text-blue-900 bg-blue-50/30">${buildSelectOptions("")}</select>
+                            </div>
+                            <div class="w-24">
+                                <label class="block text-xs text-blue-700/70 mb-1.5 font-bold">扣除(h)</label>
+                                <input type="number" id="remark-hours-${dateStr}" step="0.5" min="0.5" value="0.5" class="w-full border border-blue-200 rounded-xl p-2.5 text-sm font-medium text-blue-900 bg-blue-50/30">
+                            </div>
+                            <div class="flex-[2] min-w-[150px]">
+                                <label class="block text-xs text-blue-700/70 mb-1.5 font-bold">原因 (選填)</label>
+                                <input type="text" id="remark-reason-${dateStr}" placeholder="例如：病假" class="w-full border border-blue-200 rounded-xl p-2.5 text-sm font-medium text-blue-900 bg-blue-50/30">
+                            </div>
+                            <button onclick="addRemark('${dateStr}')" class="bg-rose-500 hover:bg-rose-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition shadow-sm">確認扣除</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderMatrixView(termDates) {
+            const container = document.getElementById('matrix-view-container');
+            
+            let tableHtml = `
+                <div class="overflow-x-auto rounded-2xl border border-blue-100 shadow-sm">
+                    <table class="w-full text-sm text-left border-collapse bg-white">
+                        <thead>
+                            <tr class="bg-blue-50/50 text-blue-800 font-bold border-b border-blue-100 text-xs uppercase tracking-wider">
+                                <th class="p-4 border-r border-blue-100 min-w-[170px]">日期</th>
+                                <th class="p-4 border-r border-blue-100 min-w-[160px] text-blue-700">午膳當值 (1)</th>
+                                <th class="p-4 border-r border-blue-100 min-w-[160px] text-blue-700">午膳當值 (2)</th>
+                                <th class="p-4 border-r border-blue-100 min-w-[160px] text-indigo-700">放學當值 (1)</th>
+                                <th class="p-4 min-w-[160px] text-indigo-700">放學當值 (2)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-blue-50/50">
+            `;
+
+            termDates.forEach(item => {
+                const dateStr = item.date;
+                const dayOfWeek = item.dayOfWeek;
+                const rec = state.records[dateStr] || { lunch: ["", ""], afterSchool: ["", ""] };
+
+                const formatCell = (val, colorClass) => val ? `<span class="${colorClass} font-bold px-3 py-1.5 rounded-lg border shadow-sm">${val}</span>` : '<span class="text-slate-300">-</span>';
+
+                tableHtml += `
+                    <tr class="hover:bg-blue-50/30 transition">
+                        <td class="p-4 font-bold text-blue-900 border-r border-blue-50 whitespace-nowrap bg-blue-50/20">
+                            ${dateStr} <span class="text-xs font-bold text-blue-600 bg-white px-2 py-0.5 rounded-md ml-1.5 border border-blue-200 shadow-sm">${dayOfWeek}</span>
+                        </td>
+                        <td class="p-4 border-r border-blue-50">${formatCell(rec.lunch?.[0], 'bg-blue-100 text-blue-800 border-blue-200')}</td>
+                        <td class="p-4 border-r border-blue-50">${formatCell(rec.lunch?.[1], 'bg-blue-100 text-blue-800 border-blue-200')}</td>
+                        <td class="p-4 border-r border-blue-50">${formatCell(rec.afterSchool?.[0], 'bg-indigo-100 text-indigo-800 border-indigo-200')}</td>
+                        <td class="p-4">${formatCell(rec.afterSchool?.[1], 'bg-indigo-100 text-indigo-800 border-indigo-200')}</td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += `</tbody></table></div>`;
+            container.innerHTML = tableHtml;
+        }
+
+        function renderStats(termDates) {
+            const stats = {};
+            state.members.forEach(m => { stats[m] = { totalHrs: 0, deductionHrs: 0 }; });
+
+            const termDateStrs = termDates.map(i => i.date);
+
+            Object.keys(state.records).forEach(dateStr => {
+                if (!termDateStrs.includes(dateStr)) return;
+                const rec = state.records[dateStr];
+
+                if (rec.lunch) rec.lunch.forEach(m => { if (m && stats[m]) stats[m].totalHrs += 0.5; });
+                if (rec.afterSchool) rec.afterSchool.forEach(m => { if (m && stats[m]) stats[m].totalHrs += 1.0; });
+                
+                if (rec.remarks) {
+                    rec.remarks.forEach(rem => {
+                        if (rem.member && stats[rem.member]) {
+                            stats[rem.member].deductionHrs += Number(rem.hours || 0);
+                            stats[rem.member].totalHrs -= Number(rem.hours || 0);
+                        }
+                    });
+                }
+            });
+
+            const tbody = document.getElementById('stats-table-body');
+            tbody.innerHTML = '';
+
+            state.members.forEach(m => {
+                const s = stats[m];
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-blue-50/50 transition border-b border-blue-50 last:border-0';
+                tr.innerHTML = `
+                    <td class="px-4 py-3.5 font-bold text-blue-900">${m}</td>
+                    <td class="px-4 py-3.5 text-center">
+                        <span class="px-3 py-1.5 rounded-full text-xs font-bold shadow-sm border ${s.totalHrs > 0 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200'}">
+                            ${s.totalHrs.toFixed(1)} h
+                        </span>
+                    </td>
+                    <td class="px-4 py-3.5 text-right text-rose-500 font-bold">${s.deductionHrs > 0 ? `-${s.deductionHrs}h` : '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        window.updateAssignee = function(dateStr, type, index, value) {
+            // 安全檢查：如果這天完全沒有紀錄，建立完整的預設結構
+            if (!state.records[dateStr]) {
+                state.records[dateStr] = { lunch: ["", ""], afterSchool: ["", ""], remarks: [] };
+            }
+            
+            // 安全檢查：如果這天有紀錄，但缺少 lunch 或 afterSchool 陣列，自動補齊
+            if (!state.records[dateStr][type]) {
+                state.records[dateStr][type] = ["", ""];
+            }
+
+            state.records[dateStr][type][index] = value;
+            // saveData 會負責更新本地記憶與觸發 renderStats
+            saveData(dateStr, state.records[dateStr]);
+        }
+
+        window.toggleRemarkForm = function(dateStr) {
+            const form = document.getElementById(`remark-form-${dateStr}`);
+            form.classList.toggle('hidden');
+        }
+
+        window.addRemark = function(dateStr) {
+            const member = document.getElementById(`remark-member-${dateStr}`).value;
+            const hours = document.getElementById(`remark-hours-${dateStr}`).value;
+            const reason = document.getElementById(`remark-reason-${dateStr}`).value;
+            if (!member) return;
+
+            if (!state.records[dateStr]) state.records[dateStr] = { lunch: ["", ""], afterSchool: ["", ""], remarks: [] };
+            if (!state.records[dateStr].remarks) state.records[dateStr].remarks = [];
+            
+            state.records[dateStr].remarks.push({
+                id: Date.now().toString(),
+                member: member,
+                hours: Number(hours),
+                reason: reason
+            });
+            
+            saveData(dateStr, state.records[dateStr]).then(() => {
+                // 強制重新渲染排班區塊，以顯示新備註卡片
+                render();
+            });
+        }
+
+        window.deleteRemark = function(dateStr, remarkId) {
+            if (state.records[dateStr] && state.records[dateStr].remarks) {
+                state.records[dateStr].remarks = state.records[dateStr].remarks.filter(r => r.id !== remarkId);
+                saveData(dateStr, state.records[dateStr]).then(() => {
+                    render();
+                });
+            }
+        }
+
+        window.openMembersModal = function() {
+            const container = document.getElementById('members-inputs-container');
+            container.innerHTML = '';
+            state.members.forEach((m, idx) => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center gap-3';
+                div.innerHTML = `
+                    <span class="text-blue-400 w-6 text-right text-sm font-bold">${idx + 1}.</span>
+                    <input type="text" id="member-input-${idx}" value="${m}" class="flex-1 border border-blue-200 rounded-xl px-4 py-3 text-sm font-medium text-blue-900 bg-blue-50/50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition shadow-sm">
+                `;
+                container.appendChild(div);
+            });
+            document.getElementById('members-modal').classList.remove('hidden');
+        }
+
+        window.closeMembersModal = function() {
+            document.getElementById('members-modal').classList.add('hidden');
+        }
+
+        window.saveMembers = function() {
+            const newMembers = [];
+            for (let i = 0; i < 16; i++) {
+                const val = document.getElementById(`member-input-${i}`).value.trim();
+                newMembers.push(val || `成員 ${i + 1}`);
+            }
+            state.members = newMembers;
+            closeMembersModal();
+            saveMembersToCloud();
+            render();
+        }
+
+        // 初始化
+        window.onload = function() {
+            setTimeout(() => {
+                if (!state.isCloudReady) initLocalStorageFallback();
+            }, 3000); // 延長判定時間，避免網路稍慢就被降級
+        };
+    </script>
+</body>
+</html>
