@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>學生會 Counter 當值分配系統 - 專業修復版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Firebase 設定
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-3OsCFOxKwRvMOYSwtdtHQtu5hevyDQE",
+            authDomain: "school-admin-8cc4f.firebaseapp.com",
+            projectId: "school-admin-8cc4f",
+            storageBucket: "school-admin-8cc4f.firebasestorage.app",
+            messagingSenderId: "906512650902",
+            appId: "1:906512650902:web:f51018de2fb88f7042e8b7",
+            measurementId: "G-D4XSFMPRRK"
+        };
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+
+            window.firebaseDb = db;
+            window.firebaseFns = { collection, doc, setDoc, onSnapshot };
+
+            console.log("Firebase Firestore 初始化成功！");
+            initCloudSync();
+        } catch (err) {
+            console.error("Firebase 初始化失敗，切換至本地儲存：", err);
+            initLocalStorageFallback();
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* 自訂美化滾動條，確保第16人及所有內容可完整捲動 */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 9999px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white; color: black; }
+            .shadow-sm, .shadow-md, .shadow-2xl { box-shadow: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+    <div id="app" class="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
+        
+        <!-- Header -->
+        <header class="bg-white rounded-3xl shadow-sm border border-slate-200/80 p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden no-print">
+            <div class="relative z-10">
+                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold mb-3 border border-blue-100">
+                    <span id="cloud-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span id="cloud-status-text">連線初始化中...</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="3" ry="3"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    學生會 Counter 當值分配系統
+                </h1>
+                <p class="text-slate-500 mt-1 text-sm md:text-base font-medium">中華基督教會基智中學 2026/2027 年度</p>
+            </div>
+            
+            <div class="relative z-10 flex flex-wrap gap-2.5 w-full md:w-auto">
+                <button onclick="openMembersModal()" class="flex-1 md:flex-none px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-2xl transition font-bold flex items-center justify-center gap-2 border border-blue-200 text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    管理名單
+                </button>
+                <button onclick="openBackupModal()" class="flex-1 md:flex-none px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition font-bold flex items-center justify-center gap-2 border border-slate-200 text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    備份與匯出
+                </button>
+                <button onclick="window.print()" class="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition font-bold flex items-center justify-center gap-1.5 border border-slate-200 text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                    列印
+                </button>
+            </div>
+        </header>
+
+        <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-white rounded-2xl shadow-sm border border-slate-200/80 p-2 gap-3 no-print">
+            <!-- 學期選擇 -->
+            <div class="flex bg-slate-100/80 rounded-xl p-1 w-full sm:w-fit gap-1">
+                <button onclick="switchTerm(1)" id="term-btn-1" class="flex-1 sm:px-5 py-2 text-xs md:text-sm font-bold rounded-lg transition-all bg-blue-600 text-white shadow-sm">第 1 學期</button>
+                <button onclick="switchTerm(2)" id="term-btn-2" class="flex-1 sm:px-5 py-2 text-xs md:text-sm font-bold rounded-lg transition-all text-slate-600 hover:text-slate-900 hover:bg-slate-200/50">第 2 學期</button>
+                <button onclick="switchTerm(3)" id="term-btn-3" class="flex-1 sm:px-5 py-2 text-xs md:text-sm font-bold rounded-lg transition-all text-slate-600 hover:text-slate-900 hover:bg-slate-200/50">第 3 學期</button>
+            </div>
+
+            <!-- 視圖選擇 (修復切換 Bug) -->
+            <div class="flex bg-slate-100/80 rounded-xl p-1 w-full sm:w-fit gap-1">
+                <button onclick="switchView('daily')" id="view-btn-daily" class="flex-1 sm:px-5 py-2 text-xs md:text-sm font-bold rounded-lg transition-all bg-white text-blue-900 shadow-sm border border-slate-200">每日排班</button>
+                <button onclick="switchView('matrix')" id="view-btn-matrix" class="flex-1 sm:px-5 py-2 text-xs md:text-sm font-bold rounded-lg transition-all text-slate-600 hover:text-slate-900 hover:bg-slate-200/50">學期總表</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- 左欄：排班主內容區塊 -->
+            <div class="lg:col-span-2 space-y-4">
+                <div class="bg-white rounded-3xl shadow-sm border border-slate-200/80 p-5 md:p-7">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-100">
+                        <h2 id="view-main-title" class="text-xl font-bold flex items-center gap-3 text-slate-900">
+                            <span class="p-2.5 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            </span>
+                            <span id="term-title-text">第 1 學期 排班表 (10/12-11/2)</span>
+                        </h2>
+                        <div class="flex items-center gap-2">
+                            <span id="date-count-badge" class="text-xs bg-slate-100 text-slate-700 font-bold px-3 py-1.5 rounded-full border border-slate-200">載入中...</span>
+                        </div>
+                    </div>
+
+                    <!-- 每日檢視容器 -->
+                    <div id="daily-view-container" class="space-y-5"></div>
+                    
+                    <!-- 學期總表容器 (完全修復並支援互動) -->
+                    <div id="matrix-view-container" class="hidden overflow-hidden"></div>
+                </div>
+            </div>
+
+            <!-- 右欄：時數統計與排行榜 (修復第16人看不見問題) -->
+            <div class="lg:col-span-1 no-print">
+                <div class="bg-white rounded-3xl shadow-sm border border-slate-200/80 p-5 md:p-6 sticky top-6">
+                    <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+                        <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-900">
+                            <span class="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                            </span>
+                            時數統計與排行
+                        </h2>
+                        <span class="text-xs text-slate-400 font-medium">依淨時數排序</span>
+                    </div>
+                    
+                    <!-- 可滾動容器：計算螢幕高度，確保16位成員完美捲動顯示，絕不被截斷 -->
+                    <div class="max-h-[calc(100vh-16rem)] overflow-y-auto custom-scrollbar pr-1">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-wider sticky top-0 z-10">
+                                <tr>
+                                    <th class="px-3 py-2.5 rounded-l-xl">成員</th>
+                                    <th class="px-2 py-2.5 text-center">午/放</th>
+                                    <th class="px-2 py-2.5 text-center">扣時</th>
+                                    <th class="px-3 py-2.5 text-right rounded-r-xl">淨時數</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stats-table-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- 規則提示說明 -->
+                    <div class="mt-4 p-4 bg-slate-50 border border-slate-200/60 text-slate-600 text-xs rounded-2xl space-y-2">
+                        <p class="font-bold text-slate-800 flex items-center gap-1.5 text-xs mb-1.5">
+                            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                            計分規則說明
+                        </p>
+                        <div class="flex items-center justify-between">
+                            <span>午膳當值 (1:05-1:30)</span> 
+                            <span class="text-blue-700 font-bold bg-white px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs">+0.5 h</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span>放學當值 (4:05-5:00)</span> 
+                            <span class="text-indigo-700 font-bold bg-white px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs">+1.0 h</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 成員設定 Modal (修復第 16 人輸入與讀取 Bug) -->
+    <div id="members-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-200">
+            <div class="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-900">
+                    <span class="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                    </span>
+                    設定成員名單 (共 16 位)
+                </h2>
+                <button onclick="closeMembersModal()" class="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition font-bold">&times;</button>
+            </div>
+            
+            <div id="members-inputs-container" class="p-6 overflow-y-auto custom-scrollbar grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-h-[60vh]"></div>
+
+            <div class="p-5 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                <button onclick="resetMembersToDefault()" class="text-xs text-rose-600 hover:underline font-bold">重置為預設名單</button>
+                <div class="flex gap-2">
+                    <button onclick="closeMembersModal()" class="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-bold text-sm">取消</button>
+                    <button onclick="saveMembers()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition font-bold text-sm shadow-sm">儲存名單</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 備份與匯出 Modal -->
+    <div id="backup-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col border border-slate-200">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    資料備份與匯出匯入
+                </h2>
+                <button onclick="closeBackupModal()" class="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-600 font-bold">&times;</button>
+            </div>
+            
+            <div class="p-6 space-y-4">
+                <div class="p-4 bg-blue-50 border border-blue-100 rounded-2xl text-xs text-blue-800 space-y-1">
+                    <p class="font-bold">匯出 JSON 備份檔</p>
+                    <p>您可以下載整個系統的當值紀錄與成員名單，隨時匯入復原。</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="exportJSONBackup()" class="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-2xl font-bold text-slate-800 text-sm flex flex-col items-center gap-2 transition">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        下載 JSON 備份
+                    </button>
+
+                    <label class="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-2xl font-bold text-slate-800 text-sm flex flex-col items-center gap-2 transition cursor-pointer">
+                        <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        匯入 JSON 備份
+                        <input type="file" id="import-file-input" accept=".json" onchange="importJSONBackup(event)" class="hidden">
+                    </label>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end">
+                <button onclick="closeBackupModal()" class="px-5 py-2 bg-slate-200 text-slate-700 rounded-xl font-bold text-sm">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 16 位預設成員名單
+        const DEFAULT_MEMBERS = Array.from({ length: 16 }, (_, i) => `成員 ${i + 1}`);
+        const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+        
+        // 全域狀態定義 (同時掛載至 window 避免切換與調用錯誤)
+        window.state = {
+            currentTerm: 1,
+            currentView: 'daily',
+            members: DEFAULT_MEMBERS,
+            records: {},
+            isCloudReady: false
+        };
+
+        const state = window.state;
+
+        function initCloudSync() {
+            const db = window.firebaseDb;
+            const { doc, collection, onSnapshot, setDoc } = window.firebaseFns;
+
+            document.getElementById('cloud-status-dot').className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+            document.getElementById('cloud-status-text').innerText = "雲端同步中";
+            state.isCloudReady = true;
+
+            // 1. 讀取與監聽成員名單設定
+            const settingsRef = doc(db, 'school_admin_settings', 'rosterConfig');
+            onSnapshot(settingsRef, (docSnap) => {
+                if (docSnap.exists() && Array.isArray(docSnap.data().members)) {
+                    state.members = docSnap.data().members.map(m => String(m).trim());
+                    // 確保名單長度充足
+                    while (state.members.length < 16) {
+                        state.members.push(`成員 ${state.members.length + 1}`);
+                    }
+                } else {
+                    setDoc(settingsRef, { members: DEFAULT_MEMBERS }, { merge: true }).catch(console.warn);
+                }
+                render();
+            }, (err) => {
+                console.warn("Firestore 設定讀取失敗：", err);
+                initLocalStorageFallback();
+            });
+
+            // 2. 讀取與監聽排班紀錄
+            const recordsCol = collection(db, 'school_admin_records');
+            onSnapshot(recordsCol, (snapshot) => {
+                const newRecords = {};
+                snapshot.forEach(docSnap => {
+                    newRecords[docSnap.id] = docSnap.data();
+                });
+                
+                state.records = { ...state.records, ...newRecords };
+                render();
+            }, (err) => {
+                console.warn("Firestore 紀錄讀取失敗，降級至本地：", err);
+                initLocalStorageFallback();
+            });
+        }
+
+        function initLocalStorageFallback() {
+            state.isCloudReady = false;
+            const dot = document.getElementById('cloud-status-dot');
+            const txt = document.getElementById('cloud-status-text');
+            if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-slate-400";
+            if (txt) txt.innerText = "離線 / 本地模式";
+
+            try {
+                const localMembers = JSON.parse(localStorage.getItem('su_members'));
+                if (Array.isArray(localMembers) && localMembers.length >= 1) {
+                    state.members = localMembers.map(m => String(m).trim());
+                }
+                const localRecords = JSON.parse(localStorage.getItem('su_records'));
+                if (localRecords && typeof localRecords === 'object') {
+                    state.records = localRecords;
+                }
+            } catch(e) {
+                console.error("Local Storage Read Error:", e);
+            }
+            render();
+        }
+
+        // 安全無時區偏差之日期生成邏輯
+        function generateTermDates(term) {
+            let start, end;
+            if (term === 1) {
+                // 第一學期：2026-10-12 到 2026-11-02
+                start = new Date(2026, 9, 12); // 注意：月從0開始，9為10月
+                end = new Date(2026, 10, 2);   // 10為11月
+            } else if (term === 2) {
+                // 第二學期：2026-11-23 到 2027-02-22
+                start = new Date(2026, 10, 23);
+                end = new Date(2027, 1, 22);
+            } else {
+                // 第三學期：2027-03-15 到 2027-06-03
+                start = new Date(2027, 2, 15);
+                end = new Date(2027, 5, 3);
+            }
+
+            const dates = [];
+            const cur = new Date(start.getTime());
+
+            while (cur <= end) {
+                const day = cur.getDay();
+                if (day !== 0 && day !== 6) { // 排除週末
+                    const yyyy = cur.getFullYear();
+                    const mm = String(cur.getMonth() + 1).padStart(2, '0');
+                    const dd = String(cur.getDate()).padStart(2, '0');
+                    const dateStr = `${yyyy}-${mm}-${dd}`;
+
+                    // 特殊假期排除清單
+                    const holidays = [
+                        '2026-10-19', '2026-10-24', '2026-12-22', '2026-12-23', '2026-12-24', 
+                        '2026-12-25', '2026-12-28', '2026-12-29', '2026-12-30', '2026-12-31', 
+                        '2027-01-01', '2027-02-03', '2027-02-04', '2027-02-05', '2027-02-08', 
+                        '2027-02-09', '2027-02-10', '2027-02-11', '2027-02-12', '2027-04-05'
+                    ];
+
+                    if (!holidays.includes(dateStr)) {
+                        dates.push({ date: dateStr, term: term, dayOfWeek: WEEKDAYS[day] });
+                    }
+                }
+                cur.setDate(cur.getDate() + 1); // 逐日遞增
+            }
+            return dates;
+        }
+
+        async function saveData(dateStr, recordData) {
+            // 1. 樂觀更新 (Optimistic UI Update)
+            state.records[dateStr] = JSON.parse(JSON.stringify(recordData));
+            try {
+                localStorage.setItem('su_records', JSON.stringify(state.records));
+            } catch(e){}
+            
+            // 2. 立即重算右側統計
+            const termDates = generateTermDates(state.currentTerm);
+            renderStats(termDates);
+
+            // 3. 背景非同步推送到 Firebase
+            if (state.isCloudReady) {
+                try {
+                    const db = window.firebaseDb;
+                    const { doc, setDoc } = window.firebaseFns;
+                    const recordRef = doc(db, 'school_admin_records', dateStr);
+                    await setDoc(recordRef, recordData, { merge: true });
+                } catch (err) {
+                    console.warn("雲端同步失敗：", err);
+                }
+            }
+        }
+
+        async function saveMembersToCloud() {
+            try {
+                localStorage.setItem('su_members', JSON.stringify(state.members));
+            } catch(e){}
+
+            if (state.isCloudReady) {
+                try {
+                    const db = window.firebaseDb;
+                    const { doc, setDoc } = window.firebaseFns;
+                    const settingsRef = doc(db, 'school_admin_settings', 'rosterConfig');
+                    await setDoc(settingsRef, { members: state.members }, { merge: true });
+                } catch (err) {
+                    console.warn("成員名單雲端儲存失敗", err);
+                }
+            }
+        }
+
+        function switchTerm(term) {
+            state.currentTerm = term;
+            for (let i = 1; i <= 3; i++) {
+                const btn = document.getElementById(`term-btn-${i}`);
+                if (btn) {
+                    if (i === term) {
+                        btn.className = "flex-1 sm:px-5 py-2 text-xs md:text-sm font-bold rounded-lg transition-all bg-blue-600 text-white shadow-sm";
+                    } else {
+                        btn.className = "flex-1 sm:px-5 py-2 text-xs md:text-sm font-bold rounded-lg transition-all text-slate-600 hover:text-slate-900 hover:bg-slate-200/50";
+                    }
+                }
+            }
+            
+            const desc = term === 1 ? "第 1 學期 (10/12-11/2)" : (term === 2 ? "第 2 學期 (11/23-2/22)" : "第 3 學期 (3/15-6/3)");
+            const titleEl = document.getElementById('term-title-text');
+            if (titleEl) titleEl.innerText = `${desc} 排班表`;
+            
+            render();
+        }
+
+        // 修復: switchView 完全解決 TypeError 並順暢切換
+        function switchView(view) {
+            state.currentView = view; // 修正全域狀態存取
+            
+            const dailyBtn = document.getElementById('view-btn-daily');
+            const matrixBtn = document.getElementById('view-btn-matrix');
+            const dailyContainer = document.getElementById('daily-view-container');
+            const matrixContainer = document.getElementById('matrix-view-container');
+
+            if (view === 'daily') {
+                if (dailyBtn) dailyBtn.className = "flex-1 sm:px-5 py-2 text-xs md:text-sm font-bold rounded-lg transition-all bg-white text-blue-900 shadow-sm border border-slate-200";
+                if (matrixBtn) matrixBtn.className = "flex-1 sm:px-5 py-2 text-xs md:text-sm font-bold rounded-lg transition-all text-slate-600 hover:text-slate-900 hover:bg-slate-200/50";
+                if (dailyContainer) dailyContainer.classList.remove('hidden');
+                if (matrixContainer) matrixContainer.classList.add('hidden');
+            } else {
+                if (matrixBtn) matrixBtn.className = "flex-1 sm:px-5 py-2 text-xs md:text-sm font-bold rounded-lg transition-all bg-white text-blue-900 shadow-sm border border-slate-200";
+                if (dailyBtn) dailyBtn.className = "flex-1 sm:px-5 py-2 text-xs md:text-sm font-bold rounded-lg transition-all text-slate-600 hover:text-slate-900 hover:bg-slate-200/50";
+                if (matrixContainer) matrixContainer.classList.remove('hidden');
+                if (dailyContainer) dailyContainer.classList.add('hidden');
+            }
+            render();
+        }
+
+        window.switchView = switchView;
+        window.switchTerm = switchTerm;
+
+        // 下拉選單安全建構輔助函式
+        function buildSelectOptions(selectedValue) {
+            const cleanSelected = String(selectedValue || '').trim();
+            let html = `<option value="">-- 選擇成員 --</option>`;
+            state.members.forEach(m => {
+                const cleanM = String(m).trim();
+                if (!cleanM) return;
+                const isSelected = (cleanM === cleanSelected) ? "selected" : "";
+                html += `<option value="${cleanM}" ${isSelected}>${cleanM}</option>`;
+            });
+            return html;
+        }
+
+        function render() {
+            const termDates = generateTermDates(state.currentTerm);
+            const badge = document.getElementById('date-count-badge');
+            if (badge) badge.innerText = `本學期共 ${termDates.length} 上課日`;
+
+            if (state.currentView === 'daily') {
+                renderDailyView(termDates);
+            } else {
+                renderMatrixView(termDates);
+            }
+
+            renderStats(termDates);
+        }
+
+        // 渲染每日排班頁面
+        function renderDailyView(termDates) {
+            const container = document.getElementById('daily-view-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            termDates.forEach(item => {
+                const dateStr = item.date;
+                const dayOfWeek = item.dayOfWeek;
+                
+                if (!state.records[dateStr]) {
+                    state.records[dateStr] = { lunch: ["", ""], afterSchool: ["", ""], remarks: [] };
+                }
+                const rec = state.records[dateStr];
+
+                // 檢查重複當值 (衝突警示標籤)
+                const assigned = [
+                    rec.lunch?.[0], rec.lunch?.[1], 
+                    rec.afterSchool?.[0], rec.afterSchool?.[1]
+                ].filter(Boolean).map(s => s.trim());
+                
+                const hasDuplicates = new Set(assigned).size !== assigned.length;
+
+                const card = document.createElement('div');
+                card.className = 'border border-slate-200/80 rounded-2xl bg-white shadow-xs hover:shadow-md transition-all overflow-hidden';
+                
+                let remarksHtml = '';
+                if (rec.remarks && rec.remarks.length > 0) {
+                    rec.remarks.forEach(rem => {
+                        remarksHtml += `
+                            <div class="flex justify-between items-center bg-rose-50 p-3 rounded-xl border border-rose-100 text-xs md:text-sm">
+                                <div class="flex items-center gap-2.5 flex-wrap">
+                                    <span class="font-bold text-rose-900">${rem.member}</span>
+                                    <span class="text-rose-600 font-bold bg-white px-2 py-0.5 rounded border border-rose-200 shadow-2xs">-${rem.hours}h</span>
+                                    <span class="text-rose-600/80 text-xs border-l border-rose-200 pl-2.5">${rem.reason || "扣時紀錄"}</span>
+                                </div>
+                                <button onclick="deleteRemark('${dateStr}', '${rem.id}')" class="text-rose-400 hover:text-rose-600 font-bold px-1.5 text-base transition">&times;</button>
+                            </div>
+                        `;
+                    });
+                }
+
+                card.innerHTML = `
+                    <div class="bg-slate-50/80 px-5 py-3.5 border-b border-slate-100 flex justify-between items-center flex-wrap gap-2">
+                        <h3 class="font-bold text-slate-900 text-base flex items-center gap-2">
+                            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                            ${dateStr} <span class="text-xs font-bold px-2 py-0.5 bg-white text-blue-700 rounded-md border border-slate-200 shadow-2xs">${dayOfWeek}</span>
+                        </h3>
+                        ${hasDuplicates ? `<span class="text-xs bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">⚠️ 警告：包含重複排班人員</span>` : ''}
+                    </div>
+
+                    <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <!-- 午膳當值 -->
+                        <div class="space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-blue-800 text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md border border-blue-100">午膳當值 (+0.5h)</span>
+                                <span class="text-slate-400 text-xs">1:05 - 1:30</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <select onchange="updateAssignee('${dateStr}', 'lunch', 0, this.value)" class="w-full border border-slate-200 rounded-xl p-2.5 text-xs md:text-sm font-semibold text-slate-800 bg-white hover:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition cursor-pointer">
+                                    ${buildSelectOptions(rec.lunch?.[0])}
+                                </select>
+                                <select onchange="updateAssignee('${dateStr}', 'lunch', 1, this.value)" class="w-full border border-slate-200 rounded-xl p-2.5 text-xs md:text-sm font-semibold text-slate-800 bg-white hover:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition cursor-pointer">
+                                    ${buildSelectOptions(rec.lunch?.[1])}
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- 放學當值 -->
+                        <div class="space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-indigo-800 text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md border border-indigo-100">放學當值 (+1.0h)</span>
+                                <span class="text-slate-400 text-xs">4:05 - 5:00</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <select onchange="updateAssignee('${dateStr}', 'afterSchool', 0, this.value)" class="w-full border border-slate-200 rounded-xl p-2.5 text-xs md:text-sm font-semibold text-slate-800 bg-white hover:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition cursor-pointer">
+                                    ${buildSelectOptions(rec.afterSchool?.[0])}
+                                </select>
+                                <select onchange="updateAssignee('${dateStr}', 'afterSchool', 1, this.value)" class="w-full border border-slate-200 rounded-xl p-2.5 text-xs md:text-sm font-semibold text-slate-800 bg-white hover:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition cursor-pointer">
+                                    ${buildSelectOptions(rec.afterSchool?.[1])}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 缺席扣時 Section -->
+                    <div class="bg-slate-50/50 p-4 space-y-3 border-t border-slate-100">
+                        <div class="flex justify-between items-center">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">缺席與扣時紀錄 (Remark)</h4>
+                            <button onclick="toggleRemarkForm('${dateStr}')" class="text-xs text-blue-600 hover:text-blue-800 font-bold bg-white px-3 py-1.5 rounded-lg transition border border-slate-200 shadow-2xs">+ 新增扣時</button>
+                        </div>
+                        ${remarksHtml ? `<div class="space-y-2 mt-2">${remarksHtml}</div>` : ''}
+                        
+                        <div id="remark-form-${dateStr}" class="hidden bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-wrap gap-3 items-end mt-2">
+                            <div class="flex-1 min-w-[120px]">
+                                <label class="block text-xs text-slate-500 mb-1 font-bold">成員</label>
+                                <select id="remark-member-${dateStr}" class="w-full border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-800 bg-slate-50/50">${buildSelectOptions("")}</select>
+                            </div>
+                            <div class="w-20">
+                                <label class="block text-xs text-slate-500 mb-1 font-bold">扣除(h)</label>
+                                <input type="number" id="remark-hours-${dateStr}" step="0.5" min="0.5" value="0.5" class="w-full border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-800 bg-slate-50/50">
+                            </div>
+                            <div class="flex-[2] min-w-[140px]">
+                                <label class="block text-xs text-slate-500 mb-1 font-bold">原因 (選填)</label>
+                                <input type="text" id="remark-reason-${dateStr}" placeholder="例如：缺席 / 請假" class="w-full border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-800 bg-slate-50/50">
+                            </div>
+                            <button onclick="addRemark('${dateStr}')" class="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-2xs">確認扣除</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // 渲染學期總表 (支援直接互動)
+        function renderMatrixView(termDates) {
+            const container = document.getElementById('matrix-view-container');
+            if (!container) return;
+            
+            let tableHtml = `
+                <div class="overflow-x-auto rounded-2xl border border-slate-200 shadow-2xs custom-scrollbar">
+                    <table class="w-full text-xs md:text-sm text-left border-collapse bg-white">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 text-xs uppercase tracking-wider">
+                                <th class="p-3 border-r border-slate-200 min-w-[140px]">日期</th>
+                                <th class="p-3 border-r border-slate-200 min-w-[140px] text-blue-700">午膳當值 (1)</th>
+                                <th class="p-3 border-r border-slate-200 min-w-[140px] text-blue-700">午膳當值 (2)</th>
+                                <th class="p-3 border-r border-slate-200 min-w-[140px] text-indigo-700">放學當值 (1)</th>
+                                <th class="p-3 min-w-[140px] text-indigo-700">放學當值 (2)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+            `;
+
+            termDates.forEach(item => {
+                const dateStr = item.date;
+                const dayOfWeek = item.dayOfWeek;
+                const rec = state.records[dateStr] || { lunch: ["", ""], afterSchool: ["", ""] };
+
+                tableHtml += `
+                    <tr class="hover:bg-slate-50/50 transition">
+                        <td class="p-3 font-bold text-slate-900 border-r border-slate-100 whitespace-nowrap bg-slate-50/30">
+                            ${dateStr} <span class="text-xs font-bold text-blue-600 bg-white px-1.5 py-0.5 rounded ml-1 border border-slate-200 shadow-2xs">${dayOfWeek}</span>
+                        </td>
+                        <td class="p-2 border-r border-slate-100">
+                            <select onchange="updateAssignee('${dateStr}', 'lunch', 0, this.value)" class="w-full border-0 bg-blue-50/60 rounded-lg p-1.5 text-xs font-bold text-blue-900 focus:ring-1 focus:ring-blue-300">
+                                ${buildSelectOptions(rec.lunch?.[0])}
+                            </select>
+                        </td>
+                        <td class="p-2 border-r border-slate-100">
+                            <select onchange="updateAssignee('${dateStr}', 'lunch', 1, this.value)" class="w-full border-0 bg-blue-50/60 rounded-lg p-1.5 text-xs font-bold text-blue-900 focus:ring-1 focus:ring-blue-300">
+                                ${buildSelectOptions(rec.lunch?.[1])}
+                            </select>
+                        </td>
+                        <td class="p-2 border-r border-slate-100">
+                            <select onchange="updateAssignee('${dateStr}', 'afterSchool', 0, this.value)" class="w-full border-0 bg-indigo-50/60 rounded-lg p-1.5 text-xs font-bold text-indigo-900 focus:ring-1 focus:ring-indigo-300">
+                                ${buildSelectOptions(rec.afterSchool?.[0])}
+                            </select>
+                        </td>
+                        <td class="p-2">
+                            <select onchange="updateAssignee('${dateStr}', 'afterSchool', 1, this.value)" class="w-full border-0 bg-indigo-50/60 rounded-lg p-1.5 text-xs font-bold text-indigo-900 focus:ring-1 focus:ring-indigo-300">
+                                ${buildSelectOptions(rec.afterSchool?.[1])}
+                            </select>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += `</tbody></table></div>`;
+            container.innerHTML = tableHtml;
+        }
+
+        // 右側統計 calculation (含午膳/放學次數與嚴格淨時數)
+        function renderStats(termDates) {
+            const stats = {};
+            
+            state.members.forEach(m => { 
+                const cleanName = String(m).trim();
+                if (cleanName) {
+                    stats[cleanName] = { lunchCount: 0, afterSchoolCount: 0, totalHrs: 0, deductionHrs: 0 };
+                }
+            });
+
+            const termDateStrs = termDates.map(i => i.date);
+
+            Object.keys(state.records).forEach(dateStr => {
+                if (!termDateStrs.includes(dateStr)) return;
+                const rec = state.records[dateStr];
+
+                if (rec.lunch && Array.isArray(rec.lunch)) {
+                    rec.lunch.forEach(m => { 
+                        const cleanM = String(m || '').trim();
+                        if (cleanM && stats[cleanM]) {
+                            stats[cleanM].lunchCount += 1;
+                            stats[cleanM].totalHrs += 0.5;
+                        }
+                    });
+                }
+                
+                if (rec.afterSchool && Array.isArray(rec.afterSchool)) {
+                    rec.afterSchool.forEach(m => { 
+                        const cleanM = String(m || '').trim();
+                        if (cleanM && stats[cleanM]) {
+                            stats[cleanM].afterSchoolCount += 1;
+                            stats[cleanM].totalHrs += 1.0;
+                        }
+                    });
+                }
+                
+                if (rec.remarks && Array.isArray(rec.remarks)) {
+                    rec.remarks.forEach(rem => {
+                        const cleanM = String(rem.member || '').trim();
+                        if (cleanM && stats[cleanM]) {
+                            const hrs = Number(rem.hours || 0);
+                            stats[cleanM].deductionHrs += hrs;
+                            stats[cleanM].totalHrs -= hrs;
+                        }
+                    });
+                }
+            });
+
+            // 轉陣列並依淨時數排序
+            const sortedMembers = Object.keys(stats).map(name => ({
+                name,
+                ...stats[name]
+            })).sort((a, b) => b.totalHrs - a.totalHrs);
+
+            const tbody = document.getElementById('stats-table-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            sortedMembers.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition border-b border-slate-100 last:border-0';
+                
+                // 前三名徽章
+                let rankBadge = `<span class="text-slate-400 text-xs w-4 inline-block font-mono">${index + 1}.</span>`;
+                if (index === 0) rankBadge = `<span class="text-amber-500 font-bold text-xs w-4 inline-block">🥇</span>`;
+                if (index === 1) rankBadge = `<span class="text-slate-400 font-bold text-xs w-4 inline-block">🥈</span>`;
+                if (index === 2) rankBadge = `<span class="text-amber-700 font-bold text-xs w-4 inline-block">🥉</span>`;
+
+                tr.innerHTML = `
+                    <td class="px-3 py-2.5 font-bold text-slate-800 text-xs md:text-sm flex items-center gap-1 truncate">
+                        ${rankBadge} ${item.name}
+                    </td>
+                    <td class="px-2 py-2.5 text-center text-xs text-slate-500">
+                        <span class="text-blue-600 font-semibold">${item.lunchCount}</span> / <span class="text-indigo-600 font-semibold">${item.afterSchoolCount}</span>
+                    </td>
+                    <td class="px-2 py-2.5 text-center text-xs text-rose-500 font-bold">
+                        ${item.deductionHrs > 0 ? `-${item.deductionHrs}h` : '-'}
+                    </td>
+                    <td class="px-3 py-2.5 text-right">
+                        <span class="px-2.5 py-1 rounded-full text-xs font-extrabold shadow-2xs border ${item.totalHrs > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200'}">
+                            ${item.totalHrs.toFixed(1)} h
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        window.updateAssignee = function(dateStr, type, index, value) {
+            const cleanVal = String(value || '').trim();
+            
+            if (!state.records[dateStr]) {
+                state.records[dateStr] = { lunch: ["", ""], afterSchool: ["", ""], remarks: [] };
+            }
+            if (!state.records[dateStr][type] || !Array.isArray(state.records[dateStr][type])) {
+                state.records[dateStr][type] = ["", ""];
+            }
+
+            state.records[dateStr][type][index] = cleanVal;
+            saveData(dateStr, state.records[dateStr]);
+        }
+
+        window.toggleRemarkForm = function(dateStr) {
+            const form = document.getElementById(`remark-form-${dateStr}`);
+            if (form) form.classList.toggle('hidden');
+        }
+
+        window.addRemark = function(dateStr) {
+            const memberEl = document.getElementById(`remark-member-${dateStr}`);
+            const hoursEl = document.getElementById(`remark-hours-${dateStr}`);
+            const reasonEl = document.getElementById(`remark-reason-${dateStr}`);
+
+            if (!memberEl || !memberEl.value) return;
+
+            const member = memberEl.value.trim();
+            const hours = Number(hoursEl.value || 0.5);
+            const reason = reasonEl.value.trim();
+
+            if (!state.records[dateStr]) state.records[dateStr] = { lunch: ["", ""], afterSchool: ["", ""], remarks: [] };
+            if (!state.records[dateStr].remarks) state.records[dateStr].remarks = [];
+            
+            state.records[dateStr].remarks.push({
+                id: Date.now().toString(),
+                member: member,
+                hours: hours,
+                reason: reason
+            });
+            
+            saveData(dateStr, state.records[dateStr]).then(() => {
+                render();
+            });
+        }
+
+        window.deleteRemark = function(dateStr, remarkId) {
+            if (state.records[dateStr] && state.records[dateStr].remarks) {
+                state.records[dateStr].remarks = state.records[dateStr].remarks.filter(r => r.id !== remarkId);
+                saveData(dateStr, state.records[dateStr]).then(() => {
+                    render();
+                });
+            }
+        }
+
+        // 開啟成員 modal：動態產生所有輸入框（防堵第16人讀取失敗）
+        window.openMembersModal = function() {
+            const container = document.getElementById('members-inputs-container');
+            if (!container) return;
+            container.innerHTML = '';
+            
+            // 確保 state.members 有 16 個
+            const displayMembers = [...state.members];
+            while (displayMembers.length < 16) {
+                displayMembers.push(`成員 ${displayMembers.length + 1}`);
+            }
+
+            displayMembers.forEach((m, idx) => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center gap-2.5 bg-slate-50 p-2 rounded-xl border border-slate-200/60';
+                div.innerHTML = `
+                    <span class="text-slate-400 w-6 text-right text-xs font-bold">${idx + 1}.</span>
+                    <input type="text" data-member-index="${idx}" value="${m}" class="member-input-field flex-1 border border-slate-200 rounded-lg px-3 py-2 text-xs md:text-sm font-semibold text-slate-800 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition">
+                `;
+                container.appendChild(div);
+            });
+            
+            document.getElementById('members-modal').classList.remove('hidden');
+        }
+
+        window.closeMembersModal = function() {
+            document.getElementById('members-modal').classList.add('hidden');
+        }
+
+        // 儲存成員名單 (全方位安全檢查，修復 TypeError 崩潰)
+        window.saveMembers = function() {
+            const inputs = document.querySelectorAll('.member-input-field');
+            const newMembers = [];
+            
+            inputs.forEach((input, i) => {
+                const val = input.value.trim();
+                newMembers.push(val || `成員 ${i + 1}`);
+            });
+
+            if (newMembers.length > 0) {
+                state.members = newMembers;
+                saveMembersToCloud();
+                closeMembersModal();
+                render();
+            }
+        }
+
+        window.resetMembersToDefault = function() {
+            if (confirm("確定要恢復預設成員名單嗎？")) {
+                state.members = [...DEFAULT_MEMBERS];
+                saveMembersToCloud();
+                closeMembersModal();
+                render();
+            }
+        }
+
+        window.openBackupModal = function() {
+            document.getElementById('backup-modal').classList.remove('hidden');
+        }
+
+        window.closeBackupModal = function() {
+            document.getElementById('backup-modal').classList.add('hidden');
+        }
+
+        window.exportJSONBackup = function() {
+            const backupData = {
+                version: "2026.1",
+                exportTime: new Date().toISOString(),
+                members: state.members,
+                records: state.records
+            };
+
+            const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `SU_Duty_Backup_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        window.importJSONBackup = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.members && data.records) {
+                        state.members = data.members;
+                        state.records = data.records;
+                        saveMembersToCloud();
+                        Object.keys(state.records).forEach(d => saveData(d, state.records[d]));
+                        alert("備份資料匯入成功！");
+                        closeBackupModal();
+                        render();
+                    } else {
+                        alert("備份檔案格式不正確！");
+                    }
+                } catch(err) {
+                    alert("解析 JSON 備份檔失敗！");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        window.onload = function() {
+            setTimeout(() => {
+                if (!state.isCloudReady) {
+                    initLocalStorageFallback();
+                }
+            }, 2500);
+        };
+    </script>
+</body>
+</html>
